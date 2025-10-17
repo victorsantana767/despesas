@@ -1,0 +1,32 @@
+#sidebar {
+    min-width: 280px;
+    max-width: 280px;
+    transition: margin-left 0.35s ease-in-out;
+}
+
+#sidebar.collapsed {
+    margin-left: -280px;
+}
+
+.wrapper {
+    display: flex;
+    width: 100%;
+    align-items: stretch;
+}
+
+#content {
+    width: 100%;
+}
+
+.top-bar-toggle {
+    cursor: pointer;
+}
+
+/* Adiciona uma sombra sutil aos cards para um visual mais moderno */
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+#content main {
+    background-color: #f8f9fa; /* Um fundo levemente cinza para a área de conteúdo */
+}
