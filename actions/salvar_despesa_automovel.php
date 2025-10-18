@@ -24,20 +24,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
 
         $valor_parcela = ($numero_parcelas > 1) ? round($valor / $numero_parcelas, 2) : $valor;
-        $data_base = new DateTime($data_despesa);
+        // Gera um ID único para o grupo de parcelas, se for uma compra parcelada
+        $grupo_parcela_id = ($numero_parcelas > 1) ? uniqid('compra_', true) : null;
+
+        $data_compra_obj = new DateTime($data_despesa);
+
+        // Define a data base para a primeira parcela
+        $data_primeira_parcela = clone $data_compra_obj;
+
+        // Lógica de vencimento para cartão de crédito
+        if ($metodo_pagamento === 'cartao_credito' && $cartao_id) {
+            // Buscar dados do cartão (dia de fechamento e vencimento)
+            $stmt_cartao = $pdo->prepare("SELECT dia_fechamento_fatura, dia_vencimento_fatura FROM cartoes WHERE id = ?");
+            $stmt_cartao->execute([$cartao_id]);
+            $cartao = $stmt_cartao->fetch(PDO::FETCH_ASSOC);
+
+            if ($cartao) {
+                // Pega o dia de fechamento e vencimento do cartão
+                $dia_fechamento = (int)$cartao['dia_fechamento_fatura'];
+                $dia_vencimento = (int)$cartao['dia_vencimento_fatura'];
+
+                // Cria um objeto de data para o fechamento da fatura no mesmo mês da compra
+                $fechamento_no_mes_da_compra = (clone $data_compra_obj)->setDate((int)$data_compra_obj->format('Y'), (int)$data_compra_obj->format('m'), $dia_fechamento);
+
+                // Se a data da compra for DEPOIS da data de fechamento do mês...
+                // Ex: Compra 22/09, Fechamento 04/09. A compra entra na próxima fatura.
+                if ($data_compra_obj > $fechamento_no_mes_da_compra) {
+                    // A fatura vencerá no mês seguinte.
+                    $data_primeira_parcela->modify('first day of next month');
+                } else {
+                    // Se a compra foi ANTES ou NO DIA do fechamento, ela entra na fatura do mês atual.
+                    $data_primeira_parcela->modify('first day of this month');
+                }
+                // Define o dia do vencimento para o mês calculado.
+                $data_primeira_parcela->setDate((int)$data_primeira_parcela->format('Y'), (int)$data_primeira_parcela->format('m'), $dia_vencimento);
+            }
+        }
 
         for ($i = 1; $i <= $numero_parcelas; $i++) {
             $descricao_parcela = ($numero_parcelas > 1) ? "{$descricao} (Parcela {$i}/{$numero_parcelas})" : $descricao;
             
             // Calcula a data da despesa para cada parcela
-            $data_parcela = clone $data_base;
+            $data_parcela = clone $data_primeira_parcela;
             if ($i > 1) {
                 $data_parcela->modify("+".($i-1)." month");
             }
 
             // 1. Inserir na tabela 'despesas'
-            $sql1 = "INSERT INTO despesas (descricao, valor, data_despesa, dono_divida_id, comprador_id, metodo_pagamento, cartao_id, automovel_id) 
-                     VALUES (:descricao, :valor, :data_despesa, :dono_divida_id, :comprador_id, :metodo_pagamento, :cartao_id, :automovel_id)";
+            $sql1 = "INSERT INTO despesas (descricao, valor, data_despesa, dono_divida_id, comprador_id, metodo_pagamento, cartao_id, automovel_id, grupo_parcela_id) 
+                     VALUES (:descricao, :valor, :data_despesa, :dono_divida_id, :comprador_id, :metodo_pagamento, :cartao_id, :automovel_id, :grupo_parcela_id)";
             
             $stmt1 = $pdo->prepare($sql1);
             $stmt1->execute([
@@ -48,7 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':comprador_id' => $comprador_id,
                 ':metodo_pagamento' => $metodo_pagamento,
                 ':cartao_id' => $cartao_id,
-                ':automovel_id' => $automovel_id
+                ':automovel_id' => $automovel_id,
+                ':grupo_parcela_id' => $grupo_parcela_id
             ]);
 
             $despesa_id = $pdo->lastInsertId();

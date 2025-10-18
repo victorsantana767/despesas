@@ -58,6 +58,7 @@ CREATE TABLE despesas (
     emprestimo_id INT NULL, -- Se a despesa for parcela de um empréstimo
     automovel_id INT NULL, -- Se a despesa for parcela de um automóvel
     status ENUM('pendente', 'pago', 'atrasado') NOT NULL DEFAULT 'pendente',
+    grupo_parcela_id VARCHAR(255) NULL DEFAULT NULL, -- Identificador para agrupar parcelas
     FOREIGN KEY (dono_divida_id) REFERENCES usuarios(id),
     FOREIGN KEY (comprador_id) REFERENCES usuarios(id),
     FOREIGN KEY (cartao_id) REFERENCES cartoes(id),

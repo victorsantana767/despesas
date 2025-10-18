@@ -1,10 +1,13 @@
 <?php
 require_once '../../includes/auth_check.php';
 require_once '../../config/config.php';
+require_once '../../includes/helpers.php';
 
 // Buscar todas as despesas com informações detalhadas
 // --- Lógica de Filtragem e Paginação ---
 $filtro_mes_ano = $_GET['mes_ano'] ?? date('Y-m');
+$filtro_usuario_ids = isset($_GET['usuario_id']) && is_array($_GET['usuario_id']) ? $_GET['usuario_id'] : [];
+$filtro_status = $_GET['status'] ?? null;
 $pagina_atual = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $itens_por_pagina = 15; // Você pode ajustar este valor
 $offset = ($pagina_atual - 1) * $itens_por_pagina;
@@ -41,6 +44,26 @@ $params[] = $data_fim;
 if ($user_tipo === 'visualizacao') {
     $where_clauses[] = "d.dono_divida_id = ?";
     $params[] = $user_id;
+} elseif (!empty($filtro_usuario_ids)) {
+    // Se for admin e um ou mais usuários foram selecionados
+    // Cria placeholders (?) para cada ID de usuário
+    $placeholders = implode(',', array_fill(0, count($filtro_usuario_ids), '?'));
+    $where_clauses[] = "d.dono_divida_id IN ($placeholders)";
+    foreach ($filtro_usuario_ids as $uid) {
+        $params[] = $uid;
+    }
+}
+
+// Filtro por status
+if (!empty($filtro_status)) {
+    if ($filtro_status === 'atrasado') {
+        $where_clauses[] = "d.status = 'pendente' AND d.data_despesa < CURDATE()";
+    } elseif ($filtro_status === 'pendente') {
+        $where_clauses[] = "d.status = 'pendente' AND d.data_despesa >= CURDATE()";
+    } else { // 'pago'
+        $where_clauses[] = "d.status = ?";
+        $params[] = $filtro_status;
+    }
 }
 
 $sql_where = "";
@@ -71,6 +94,13 @@ $stmt->bindValue(count($params) + 2, $offset, PDO::PARAM_INT);
 $stmt->execute();
 
 $despesas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Buscar usuários para o dropdown de filtro (apenas para admins)
+$usuarios_filtro = [];
+if ($user_tipo === 'admin') {
+    $stmt_usuarios = $pdo->query("SELECT id, nome FROM usuarios ORDER BY nome");
+    $usuarios_filtro = $stmt_usuarios->fetchAll(PDO::FETCH_ASSOC);
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -80,6 +110,8 @@ $despesas = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <title>Minhas Despesas</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- CSS para o seletor múltiplo (Bootstrap-select) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
     <link href="../../assets/css/style.css" rel="stylesheet">
 </head>
 <body>
@@ -101,13 +133,45 @@ $despesas = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <!-- Formulário de Filtros -->
                 <div class="card mb-4">
                     <div class="card-body">
-                        <form method="GET" action="index.php" class="row align-items-end">
-                            <div class="col-md-4">
+                        <form method="GET" action="index.php" class="row g-3 align-items-end">
+                            <div class="col-md-3">
                                 <label for="mes_ano" class="form-label">Filtrar por Mês/Ano</label>
                                 <input type="month" class="form-control" id="mes_ano" name="mes_ano" value="<?php echo htmlspecialchars($filtro_mes_ano); ?>">
                             </div>
-                            <div class="col-md-2">
+                            <?php if ($user_tipo === 'admin'): ?>
+                            <div class="col-md-4">
+                                <label for="usuario_id" class="form-label">Pessoa(s)</label>
+                                <select class="form-select" id="usuario_id" name="usuario_id[]" multiple data-live-search="true" title="Selecione as pessoas...">
+                                    <?php foreach ($usuarios_filtro as $usuario): ?>
+                                        <option value="<?php echo $usuario['id']; ?>" <?php echo in_array($usuario['id'], $filtro_usuario_ids) ? 'selected' : ''; ?>>
+                                            <?php echo htmlspecialchars($usuario['nome']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <?php endif; ?>
+                            <div class="col-md-3">
+                                <label for="status" class="form-label">Status</label>
+                                <select class="form-select" id="status" name="status">
+                                    <option value="">Todos</option>
+                                    <option value="pendente" <?php echo ($filtro_status == 'pendente') ? 'selected' : ''; ?>>Pendente</option>
+                                    <option value="atrasado" <?php echo ($filtro_status == 'atrasado') ? 'selected' : ''; ?>>Atrasado</option>
+                                    <option value="pago" <?php echo ($filtro_status == 'pago') ? 'selected' : ''; ?>>Pago</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
                                 <button type="submit" class="btn btn-primary w-100"><i class="bi bi-funnel-fill"></i> Filtrar</button>
+                                <?php
+                                    // Constrói a query string para os usuários
+                                    $user_query_string = http_build_query(['usuario_id' => $filtro_usuario_ids]);
+                                    $pdf_url = "../../actions/exportar_despesas_pdf.php?mes_ano=$filtro_mes_ano&$user_query_string&status=$filtro_status";
+                                ?>
+                                <div class="btn-group ms-2" role="group">
+                                    <a href="<?php echo $pdf_url; ?>&output=I" class="btn btn-secondary" target="_blank" title="Pré-visualizar PDF"><i class="bi bi-eye-fill"></i></a>
+                                    <a href="<?php echo $pdf_url; ?>&output=D" class="btn btn-danger" target="_blank" title="Exportar para PDF">
+                                        <i class="bi bi-file-earmark-pdf-fill"></i>
+                                    </a>
+                                </div>
                             </div>
                         </form>
                     </div>
@@ -160,17 +224,7 @@ $despesas = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <?php
-                                                    $hoje = new DateTime();
-                                                    $vencimento = new DateTime($despesa['data_despesa']);
-                                                ?>
-                                                <?php if ($despesa['status'] == 'pago'): ?>
-                                                    <span class="badge bg-success">Pago</span>
-                                                <?php elseif ($despesa['status'] == 'pendente' && $vencimento->format('Y-m-d') < $hoje->format('Y-m-d')): ?>
-                                                    <span class="badge bg-danger">Atrasado</span>
-                                                <?php else: ?>
-                                                    <span class="badge bg-warning text-dark">Pendente</span>
-                                                <?php endif; ?>
+                                                <?php echo get_status_badge($despesa['status'], $despesa['data_despesa']); ?>
                                             </td>
                                             <td class="text-center">
                                                 <div class="btn-group">
@@ -183,6 +237,12 @@ $despesas = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                                     <a href="editar.php?id=<?php echo $despesa['id']; ?>" class="btn btn-sm btn-outline-primary" title="Editar Despesa">
                                                         <i class="bi bi-pencil-square"></i>
                                                     </a>
+                                                    <?php if ($user_tipo === 'admin'): ?>
+                                                        <form action="../../actions/excluir_despesa.php" method="POST" class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir esta despesa?');">
+                                                            <input type="hidden" name="id" value="<?php echo $despesa['id']; ?>">
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir Despesa"><i class="bi bi-trash"></i></button>
+                                                        </form>
+                                                    <?php endif; ?>
                                                 </div>
                                             </td>
                                         </tr>
@@ -196,7 +256,13 @@ $despesas = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <ul class="pagination justify-content-center">
                                     <?php for ($i = 1; $i <= $total_paginas; $i++): ?>
                                         <li class="page-item <?php echo ($i == $pagina_atual) ? 'active' : ''; ?>">
-                                            <a class="page-link" href="?mes_ano=<?php echo $filtro_mes_ano; ?>&page=<?php echo $i; ?>">
+                                            <?php
+                                                // Reconstrói a query string para a paginação
+                                                $pagination_query = http_build_query([
+                                                    'mes_ano' => $filtro_mes_ano, 'usuario_id' => $filtro_usuario_ids, 'status' => $filtro_status, 'page' => $i
+                                                ]);
+                                            ?>
+                                            <a class="page-link" href="?<?php echo $pagination_query; ?>">
                                                 <?php echo $i; ?>
                                             </a>
                                         </li>
@@ -212,6 +278,19 @@ $despesas = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- JS para o seletor múltiplo (Bootstrap-select) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/js/bootstrap-select.min.js"></script>
     <script src="../../assets/js/scripts.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Aplica o estilo ao seletor de usuários, se ele existir na página
+            const userSelect = document.getElementById('usuario_id');
+            if (userSelect) {
+                // Inicializa o Bootstrap-select
+                // É necessário usar jQuery para esta biblioteca
+                $('#usuario_id').selectpicker();
+            }
+        });
+    </script>
 </body>
 </html>

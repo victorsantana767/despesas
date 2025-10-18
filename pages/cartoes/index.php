@@ -1,6 +1,7 @@
 <?php
 require_once '../../includes/auth_check.php';
 require_once '../../config/config.php';
+require_once '../../includes/helpers.php';
 
 // Apenas admins podem acessar esta página
 if ($user_tipo !== 'admin') {
@@ -16,6 +17,34 @@ $stmt = $pdo->query("
     ORDER BY u.nome, c.nome_cartao
 ");
 $cartoes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// --- Lógica de Filtragem ---
+$filtro_mes_ano = $_GET['mes_ano'] ?? date('Y-m');
+
+// Otimização (Evitar N+1 Query): Buscar todas as despesas de cartão de crédito para o mês filtrado
+$all_despesas_cartao = [];
+if (!empty($cartoes)) {
+    // Pega o primeiro e último dia do mês filtrado.
+    // A data_despesa para parcelas de cartão já é a data de vencimento da fatura.
+    $inicio_mes_filtro = date('Y-m-01', strtotime($filtro_mes_ano));
+    $fim_mes_filtro = date('Y-m-t', strtotime($filtro_mes_ano));
+
+    $sql_despesas = "
+        SELECT id, cartao_id, descricao, valor, data_despesa, status 
+        FROM despesas 
+        WHERE cartao_id IS NOT NULL 
+        AND data_despesa BETWEEN ? AND ? -- Filtra pelo mês de vencimento da fatura
+        ORDER BY data_despesa DESC
+    ";
+    $stmt_despesas = $pdo->prepare($sql_despesas);
+    $stmt_despesas->execute([$inicio_mes_filtro, $fim_mes_filtro]);
+    $despesas_raw = $stmt_despesas->fetchAll(PDO::FETCH_ASSOC);
+
+    // Agrupa as despesas por cartao_id para fácil acesso
+    foreach ($despesas_raw as $despesa) {
+        $all_despesas_cartao[$despesa['cartao_id']][] = $despesa;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -43,11 +72,29 @@ $cartoes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <a href="adicionar.php" class="btn btn-success"><i class="bi bi-credit-card-2-front-fill me-2"></i>Adicionar Novo Cartão</a>
                 </div>
 
+                <!-- Formulário de Filtros -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <form method="GET" action="index.php" class="row g-3 align-items-end">
+                            <div class="col-md-4">
+                                <label for="mes_ano" class="form-label">Visualizar Fatura de (Mês/Ano)</label>
+                                <input type="month" class="form-control" id="mes_ano" name="mes_ano" value="<?php echo htmlspecialchars($filtro_mes_ano); ?>">
+                            </div>
+                            <div class="col-md-3 d-grid">
+                                <button type="submit" class="btn btn-primary"><i class="bi bi-funnel-fill"></i> Filtrar Faturas</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
                 <?php if (isset($_GET['success'])): ?>
                     <div class="alert alert-success">Cartão salvo com sucesso!</div>
                 <?php endif; ?>
                 <?php if (isset($_GET['deleted'])): ?>
                     <div class="alert alert-success">Cartão excluído com sucesso!</div>
+                <?php endif; ?>
+                <?php if (isset($_GET['fatura_paga'])): ?>
+                    <div class="alert alert-success">Fatura marcada como paga com sucesso!</div>
                 <?php endif; ?>
                 <?php if (isset($_GET['error']) && $_GET['error'] === 'foreign_key'): ?>
                     <div class="alert alert-danger"><b>Erro:</b> Não foi possível excluir o cartão, pois ele já está vinculado a uma ou mais despesas.</div>
@@ -61,35 +108,112 @@ $cartoes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 Nenhum cartão cadastrado ainda. Clique em "Adicionar Novo Cartão" para começar.
                             </div>
                         <?php else: ?>
-                            <div class="table-responsive">
-                                <table class="table table-striped table-hover align-middle">
-                                    <thead class="table-dark">
-                                        <tr>
-                                            <th>Nome do Cartão</th>
-                                            <th>Titular</th>
-                                            <th>Dia Fechamento</th>
-                                            <th>Dia Vencimento</th>
-                                            <th>Validade</th>
-                                            <th class="text-center">Ações</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($cartoes as $cartao): ?>
-                                        <tr>
-                                            <td><?php echo htmlspecialchars($cartao['nome_cartao']); ?></td>
-                                            <td><?php echo htmlspecialchars($cartao['titular_nome']); ?></td>
-                                            <td><?php echo $cartao['dia_fechamento_fatura']; ?></td>
-                                            <td><?php echo $cartao['dia_vencimento_fatura']; ?></td>
-                                            <td><?php echo htmlspecialchars($cartao['data_validade_cartao']); ?></td>
-                                            <td class="text-center">
-                                                <a href="editar.php?id=<?php echo $cartao['id']; ?>" class="btn btn-sm btn-primary" title="Editar Cartão">
-                                                    <i class="bi bi-pencil-square"></i> Editar
-                                                </a>
-                                            </td>
-                                        </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
+                            <div class="accordion" id="accordionCartoes">
+                                <?php foreach ($cartoes as $cartao): ?>
+                                    <?php
+                                        // A data de vencimento da fatura é o mês que está sendo filtrado
+                                        $mes_vencimento_fatura = new DateTime($filtro_mes_ano . '-01');
+
+                                        // Pega as despesas deste cartão que já foram filtradas pelo mês de vencimento
+                                        $despesas_cartao = [];
+                                        if (isset($all_despesas_cartao[$cartao['id']])) {
+                                            foreach ($all_despesas_cartao[$cartao['id']] as $despesa) {
+                                                $despesas_cartao[] = $despesa;
+                                            }
+                                        }
+
+                                        $total_fatura = array_sum(array_column($despesas_cartao, 'valor'));
+
+                                        // Verifica se há despesas pendentes para exibir o botão de pagar
+                                        $despesas_pendentes = array_filter($despesas_cartao, function($despesa) {
+                                            return $despesa['status'] === 'pendente';
+                                        });
+                                        $todos_pagos = empty($despesas_pendentes);
+                                    ?>
+                                    <?php
+                                        // A extensão intl do PHP precisa estar habilitada no php.ini
+                                        // Traduz o nome do mês para português
+                                        $formatter = new IntlDateFormatter(
+                                            'pt_BR',
+                                            IntlDateFormatter::FULL,
+                                            IntlDateFormatter::NONE,
+                                            'America/Sao_Paulo',
+                                            IntlDateFormatter::GREGORIAN,
+                                            'MMMM \'de\' yyyy'
+                                        );
+                                        $nome_fatura_pt = ucfirst($formatter->format($mes_vencimento_fatura));
+                                    ?>
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header" id="heading-<?php echo $cartao['id']; ?>">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<?php echo $cartao['id']; ?>" aria-expanded="false" aria-controls="collapse-<?php echo $cartao['id']; ?>">
+                                                <div class="w-100 d-flex justify-content-between pe-3">
+                                                    <div>
+                                                        <span><strong><?php echo htmlspecialchars($cartao['nome_cartao']); ?></strong> (Titular: <?php echo htmlspecialchars($cartao['titular_nome']); ?>)</span>
+                                                        <small class="d-block text-muted">Fatura de <?php echo $nome_fatura_pt; ?> - Vencimento dia <?php echo $cartao['dia_vencimento_fatura']; ?></small>
+                                                    </div>
+                                                    <?php if ($total_fatura > 0): ?>
+                                                        <span class="badge bg-primary d-flex align-items-center">
+                                                            Total: R$ <?php echo number_format($total_fatura, 2, ',', '.'); ?>
+                                                        </span>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </button>
+                                        </h2>
+                                        <div id="collapse-<?php echo $cartao['id']; ?>" class="accordion-collapse collapse" aria-labelledby="heading-<?php echo $cartao['id']; ?>" data-bs-parent="#accordionCartoes">
+                                            <div class="accordion-body">
+                                                <?php if (empty($despesas_cartao)): ?>
+                                                    <p class="text-muted">Nenhuma despesa encontrada para este cartão neste período.</p>
+                                                <?php else: ?>
+                                                    <table class="table table-sm table-bordered">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th>Data</th>
+                                                                <th>Descrição</th>
+                                                                <th>Status</th>
+                                                                <th class="text-end">Valor</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <?php foreach ($despesas_cartao as $despesa): ?>
+                                                                <tr>
+                                                                    <td><?php echo date('d/m/Y', strtotime($despesa['data_despesa'])); ?></td>
+                                                                    <td><?php echo htmlspecialchars($despesa['descricao']); ?></td>
+                                                                    <td>
+                                                                        <?php echo get_status_badge($despesa['status'], $despesa['data_despesa']); ?>
+                                                                    </td>
+                                                                    <td class="text-end">R$ <?php echo number_format($despesa['valor'], 2, ',', '.'); ?></td>
+                                                                </tr>
+                                                            <?php endforeach; ?>
+                                                        </tbody>
+                                                    </table>
+                                                <?php endif; ?>
+                                                <div class="d-flex align-items-center gap-2 mt-2">
+                                                    <?php if (!$todos_pagos): ?>
+                                                        <form action="../../actions/pagar_fatura_cartao.php" method="POST" class="d-inline-block" onsubmit="return confirm('Tem certeza que deseja marcar todas as despesas pendentes desta fatura como pagas?');">
+                                                            <input type="hidden" name="cartao_id" value="<?php echo $cartao['id']; ?>">
+                                                            <input type="hidden" name="mes_ano" value="<?php echo $filtro_mes_ano; ?>">
+                                                            <button type="submit" class="btn btn-success btn-sm">
+                                                                <i class="bi bi-check-all"></i> Pagar Fatura
+                                                            </button>
+                                                        </form>
+                                                    <?php elseif ($total_fatura > 0): ?>
+                                                        <span class="badge bg-success p-2"><i class="bi bi-check-circle-fill me-1"></i> Fatura Paga</span>
+                                                    <?php endif; ?>
+
+                                                    <a href="editar.php?id=<?php echo $cartao['id']; ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-gear-fill"></i> Editar Cartão</a>
+                                                    
+                                                    <?php if ($total_fatura > 0): ?>
+                                                        <?php $fatura_pdf_url = "../../actions/exportar_fatura_pdf.php?cartao_id={$cartao['id']}&mes_ano=$filtro_mes_ano"; ?>
+                                                        <div class="btn-group" role="group">
+                                                            <button type="button" class="btn btn-outline-secondary btn-sm btn-preview" data-bs-toggle="modal" data-bs-target="#pdfPreviewModal" data-pdf-url="<?php echo $fatura_pdf_url; ?>&output=I" title="Pré-visualizar Fatura"><i class="bi bi-eye"></i></button>
+                                                            <a href="<?php echo $fatura_pdf_url; ?>&output=D" class="btn btn-outline-danger btn-sm" title="Exportar Fatura"><i class="bi bi-file-earmark-pdf"></i></a>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -98,7 +222,35 @@ $cartoes = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 
+    <!-- Modal para Pré-visualização de PDF -->
+    <div class="modal fade" id="pdfPreviewModal" tabindex="-1" aria-labelledby="pdfPreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-fullscreen-lg-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="pdfPreviewModalLabel">Pré-visualização do Documento</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0" style="height: 80vh;">
+                    <iframe id="pdf-iframe" src="" width="100%" height="100%" frameborder="0"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="../../assets/js/scripts.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const pdfPreviewModal = document.getElementById('pdfPreviewModal');
+            const iframe = document.getElementById('pdf-iframe');
+
+            pdfPreviewModal.addEventListener('show.bs.modal', function (event) {
+                // Botão que acionou o modal
+                const button = event.relatedTarget;
+                const pdfUrl = button.getAttribute('data-pdf-url');
+                iframe.setAttribute('src', pdfUrl);
+            });
+        });
+    </script>
 </body>
 </html>

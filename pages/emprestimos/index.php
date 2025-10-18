@@ -1,6 +1,7 @@
 <?php
 require_once '../../includes/auth_check.php';
 require_once '../../config/config.php';
+require_once '../../includes/helpers.php';
 
 if ($user_tipo !== 'admin') {
     header("Location: ../dashboard.php");
@@ -96,17 +97,7 @@ $stmt_parcelas = $pdo->prepare("
                                                         <td><?php echo date('d/m/Y', strtotime($parcela['data_despesa'])); ?></td>
                                                         <td>R$ <?php echo number_format($parcela['valor'], 2, ',', '.'); ?></td>
                                                         <td>
-                                                            <?php
-                                                                $hoje = new DateTime();
-                                                                $vencimento = new DateTime($parcela['data_despesa']);
-                                                            ?>
-                                                            <?php if ($parcela['status'] == 'pago'): ?>
-                                                                <span class="badge bg-success">Pago</span>
-                                                            <?php elseif ($parcela['status'] == 'pendente' && $vencimento->format('Y-m-d') < $hoje->format('Y-m-d')): ?>
-                                                                <span class="badge bg-danger">Atrasado</span>
-                                                            <?php else: ?>
-                                                                <span class="badge bg-warning text-dark">Pendente</span>
-                                                            <?php endif; ?>
+                                                            <?php echo get_status_badge($parcela['status'], $parcela['data_despesa']); ?>
                                                         </td>
                                                         <td class="text-center">
                                                             <div class="btn-group">

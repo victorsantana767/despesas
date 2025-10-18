@@ -1,17 +1,68 @@
+/* Estilo geral do Wrapper */
+.wrapper {
+    display: flex;
+    width: 100%;
+    align-items: stretch;
+}
+
+/* --- Estilização do Sidebar --- */
 #sidebar {
     min-width: 280px;
     max-width: 280px;
+    background: #343a40; /* Cor de fundo escura */
+    color: #fff;
     transition: margin-left 0.35s ease-in-out;
+    min-height: 100vh;
 }
 
 #sidebar.collapsed {
     margin-left: -280px;
 }
 
-.wrapper {
-    display: flex;
-    width: 100%;
-    align-items: stretch;
+.sidebar-header {
+    padding: 20px;
+    background: #212529; /* Um tom mais escuro para o header */
+    text-align: center;
+}
+
+.sidebar-header h3 {
+    color: #fff;
+    margin: 0;
+}
+
+#sidebar ul.components {
+    padding: 20px 0;
+    border-bottom: 1px solid #47748b;
+}
+
+#sidebar ul p {
+    color: #fff;
+    padding: 10px;
+}
+
+#sidebar ul li a {
+    padding: 15px 20px;
+    font-size: 1.1em;
+    display: block;
+    color: #adb5bd; /* Cor do texto dos links */
+    text-decoration: none;
+    transition: all 0.3s;
+}
+
+#sidebar ul li a:hover {
+    color: #fff;
+    background: #495057; /* Fundo no hover */
+}
+
+#sidebar ul li.active > a, a[aria-expanded="true"] {
+    color: #fff;
+    background: #dc3545; /* Cor de destaque para item ativo */
+}
+
+ul ul a {
+    font-size: 0.9em !important;
+    padding: 10px 30px !important;
+    background: #3e444a; /* Fundo para sub-itens */
 }
 
 #content {
@@ -22,6 +73,10 @@
     cursor: pointer;
 }
 
+hr.sidebar-divider {
+    margin: 1rem 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
 /* Adiciona uma sombra sutil aos cards para um visual mais moderno */
 .card {
     box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
@@ -29,4 +84,13 @@
 
 #content main {
     background-color: #f8f9fa; /* Um fundo levemente cinza para a área de conteúdo */
+}
+
+/* Estilo para botões de ação de relatório (PDF) */
+.btn-group .btn-secondary, .btn-group .btn-danger {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+.btn-group .btn-secondary:hover, .btn-group .btn-danger:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
