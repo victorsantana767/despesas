@@ -1,6 +1,7 @@
 <?php
 require_once '../../includes/auth_check.php';
 require_once '../../config/config.php';
+require_once '../../includes/helpers.php';
 
 // --- Lógica de Filtragem ---
 
@@ -33,7 +34,8 @@ if (isset($_GET['filtrar'])) {
             d.valor, 
             d.data_despesa, 
             dono.nome AS dono_divida_nome,
-            comprador.nome AS comprador_nome,
+            comprador.nome AS comprador_nome, 
+            d.status,
             d.metodo_pagamento,
             c.nome_cartao
         FROM despesas d
@@ -137,7 +139,21 @@ if (isset($_GET['filtrar'])) {
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <span>Resultados</span>
-                            <span class="badge bg-primary rounded-pill fs-6">Total: R$ <?php echo number_format($total_despesas, 2, ',', '.'); ?></span>
+                            <div>
+                                <?php
+                                    // Constrói a query string para o link do PDF
+                                    $pdf_params = http_build_query([
+                                        'usuario_id' => $filtro_usuario_id,
+                                        'data_inicio' => $filtro_data_inicio,
+                                        'data_fim' => $filtro_data_fim
+                                    ]);
+                                ?>
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#pdfPreviewModal" data-pdf-url="../../actions/exportar_relatorio_despesas_pdf.php?<?php echo $pdf_params; ?>&output=I" title="Pré-visualizar Relatório"><i class="bi bi-eye-fill"></i> Visualizar</button>
+                                    <a href="../../actions/exportar_relatorio_despesas_pdf.php?<?php echo $pdf_params; ?>&output=D" class="btn btn-danger btn-sm" target="_blank" title="Baixar Relatório em PDF"><i class="bi bi-download"></i> Baixar PDF</a>
+                                </div>
+                                <span class="badge bg-primary rounded-pill fs-6 ms-3">Total: R$ <?php echo number_format($total_despesas, 2, ',', '.'); ?></span>
+                            </div>
                         </div>
                         <div class="card-body">
                             <?php if (empty($despesas)): ?>
@@ -152,6 +168,7 @@ if (isset($_GET['filtrar'])) {
                                                 <th>Dono da Dívida</th>
                                                 <th>Comprador</th>
                                                 <th>Pagamento</th>
+                                                <th>Status</th>
                                                 <th class="text-end">Valor</th>
                                             </tr>
                                         </thead>
@@ -167,6 +184,9 @@ if (isset($_GET['filtrar'])) {
                                                     <?php if ($despesa['nome_cartao']): ?>
                                                         <small class="d-block text-muted"><?php echo htmlspecialchars($despesa['nome_cartao']); ?></small>
                                                     <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <?php echo get_status_badge($despesa['status'], $despesa['data_despesa']); ?>
                                                 </td>
                                                 <td class="text-end"><?php echo number_format($despesa['valor'], 2, ',', '.'); ?></td>
                                             </tr>
@@ -184,7 +204,36 @@ if (isset($_GET['filtrar'])) {
         </div>
     </div>
 
+    <!-- Modal para Pré-visualização de PDF -->
+    <div class="modal fade" id="pdfPreviewModal" tabindex="-1" aria-labelledby="pdfPreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-fullscreen-lg-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="pdfPreviewModalLabel">Pré-visualização do Relatório</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0" style="height: 80vh;">
+                    <iframe id="pdf-iframe" src="" width="100%" height="100%" frameborder="0"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="../../assets/js/scripts.js"></script>
+    <script>
+        // Script para carregar o PDF no modal de pré-visualização
+        document.addEventListener('DOMContentLoaded', function () {
+            const pdfPreviewModal = document.getElementById('pdfPreviewModal');
+            if (pdfPreviewModal) {
+                const iframe = document.getElementById('pdf-iframe');
+                pdfPreviewModal.addEventListener('show.bs.modal', function (event) {
+                    const button = event.relatedTarget;
+                    const pdfUrl = button.getAttribute('data-pdf-url');
+                    iframe.setAttribute('src', pdfUrl);
+                });
+            }
+        });
+    </script>
 </body>
 </html>

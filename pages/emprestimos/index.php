@@ -69,13 +69,26 @@ $stmt_parcelas = $pdo->prepare("
                                 // Busca as parcelas para o empréstimo atual
                                 $stmt_parcelas->execute([$emprestimo['id']]);
                                 $parcelas = $stmt_parcelas->fetchAll(PDO::FETCH_ASSOC);
+
+                                // Calcula os totais com base nas parcelas reais
+                                $total_real_emprestimo = array_sum(array_column($parcelas, 'valor'));
+                                $total_pago = 0;
+                                foreach ($parcelas as $p) {
+                                    if ($p['status'] === 'pago') {
+                                        $total_pago += $p['valor'];
+                                    }
+                                }
+                                $saldo_devedor = $total_real_emprestimo - $total_pago;
                             ?>
                             <div class="accordion-item">
                                 <h2 class="accordion-header" id="heading-<?php echo $emprestimo['id']; ?>">
                                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<?php echo $emprestimo['id']; ?>" aria-expanded="false" aria-controls="collapse-<?php echo $emprestimo['id']; ?>">
                                         <div class="w-100 d-flex justify-content-between pe-3">
-                                            <span><strong><?php echo htmlspecialchars($emprestimo['descricao']); ?></strong> (<?php echo htmlspecialchars($emprestimo['banco']); ?>)</span>
-                                            <span class="badge bg-secondary"><?php echo $emprestimo['numero_parcelas'] . 'x de R$ ' . number_format($emprestimo['valor_parcela'], 2, ',', '.'); ?></span>
+                                            <div>
+                                                <strong><?php echo htmlspecialchars($emprestimo['descricao']); ?></strong> (<?php echo htmlspecialchars($emprestimo['banco']); ?>)
+                                                <small class="d-block text-muted">Saldo Devedor: <span class="text-danger fw-bold">R$ <?php echo number_format($saldo_devedor, 2, ',', '.'); ?></span></small>
+                                            </div>
+                                            <span class="badge bg-secondary d-flex align-items-center">Total: R$ <?php echo number_format($total_real_emprestimo, 2, ',', '.'); ?></span>
                                         </div>
                                     </button>
                                 </h2>

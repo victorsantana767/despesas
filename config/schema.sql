@@ -34,6 +34,22 @@ CREATE TABLE ganhos (
     FOREIGN KEY (tipo_ganho_id) REFERENCES tipos_ganho(id)
 );
 
+-- Tabela de Ganhos Recorrentes (Modelos)
+-- Armazena os modelos para ganhos que se repetem (salários, aluguéis, etc.)
+CREATE TABLE ganhos_recorrentes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    tipo_ganho_id INT NOT NULL,
+    descricao VARCHAR(255) NOT NULL,
+    valor_base DECIMAL(10, 2) NOT NULL,
+    dia_geracao INT NOT NULL, -- Dia do mês que o ganho deve ser provisionado (1-31)
+    data_inicio DATE NOT NULL,
+    data_fim DATE NULL, -- Se NULO, a recorrência é indefinida
+    ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    FOREIGN KEY (tipo_ganho_id) REFERENCES tipos_ganho(id)
+);
+
 -- Tabela de Cartões de Crédito
 CREATE TABLE cartoes (
     id INT AUTO_INCREMENT PRIMARY KEY,
