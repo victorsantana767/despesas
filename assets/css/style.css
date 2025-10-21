@@ -7,46 +7,35 @@
 
 /* --- Estilização do Sidebar --- */
 #sidebar {
-    min-width: 280px;
-    max-width: 280px;
+    min-width: 250px;
+    max-width: 250px; /* Largura reduzida para um visual mais compacto */
     background: #343a40; /* Cor de fundo escura */
     color: #fff;
     transition: margin-left 0.35s ease-in-out;
     min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem; /* Padding interno geral reduzido */
 }
 
 #sidebar.collapsed {
-    margin-left: -280px;
-}
-
-.sidebar-header {
-    padding: 20px;
-    background: #212529; /* Um tom mais escuro para o header */
-    text-align: center;
-}
-
-.sidebar-header h3 {
-    color: #fff;
-    margin: 0;
+    margin-left: -250px;
 }
 
 #sidebar ul.components {
-    padding: 20px 0;
-    border-bottom: 1px solid #47748b;
-}
-
-#sidebar ul p {
-    color: #fff;
-    padding: 10px;
+    padding: 0; /* Remove padding padrão da lista */
 }
 
 #sidebar ul li a {
-    padding: 15px 20px;
-    font-size: 1.1em;
+    padding: 0.7rem 1rem; /* Padding vertical ainda mais reduzido */
+    font-size: 0.9rem; /* Fonte um pouco menor para acompanhar */
     display: block;
     color: #adb5bd; /* Cor do texto dos links */
     text-decoration: none;
     transition: all 0.3s;
+    border-radius: 0.375rem; /* Bordas arredondadas como os botões do Bootstrap */
+    display: flex;
+    align-items: center; /* Alinha ícone e texto verticalmente */
 }
 
 #sidebar ul li a:hover {
@@ -54,19 +43,28 @@
     background: #495057; /* Fundo no hover */
 }
 
-#sidebar ul li.active > a, a[aria-expanded="true"] {
+/* Estilo para o link ativo, usando a classe .active do Bootstrap que já está no PHP */
+#sidebar .nav-link.active {
     color: #fff;
-    background: #dc3545; /* Cor de destaque para item ativo */
+    background: #0d6efd; /* Cor de destaque azul (primária do Bootstrap) */
 }
 
-ul ul a {
+/* Garante que o ícone dentro do link ativo também fique branco */
+#sidebar .nav-link.active i {
+    color: #fff;
+}
+
+/* Remove o estilo antigo de submenu que não está sendo usado */
+/* ul ul a {
     font-size: 0.9em !important;
     padding: 10px 30px !important;
-    background: #3e444a; /* Fundo para sub-itens */
+    background: #3e444a; 
 }
 
+/* Faz com que a área de conteúdo cresça para preencher o espaço restante */
 #content {
-    width: 100%;
+    flex-grow: 1;
+    transition: all 0.35s ease-in-out;
 }
 
 .top-bar-toggle {
@@ -74,7 +72,7 @@ ul ul a {
 }
 
 hr.sidebar-divider {
-    margin: 1rem 1rem;
+    margin: 1rem 0;
     border-top: 1px solid rgba(255, 255, 255, 0.15);
 }
 /* Adiciona uma sombra sutil aos cards para um visual mais moderno */

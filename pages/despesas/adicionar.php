@@ -96,6 +96,27 @@ $cartoes = $stmt_cartoes->fetchAll(PDO::FETCH_ASSOC);
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
+                                <!-- Campos específicos para Crediário Bemol -->
+                                <div class="col-md-6" id="campo_bemol" style="display: none;">
+                                    <div class="row">
+                                        <div class="col-md-4 mb-3">
+                                            <label for="numero_parcelas_bemol" class="form-label">Nº de Parcelas</label>
+                                            <input type="number" class="form-control" id="numero_parcelas_bemol" name="numero_parcelas_bemol" min="1" value="1">
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="dia_vencimento_parcela_bemol" class="form-label">Dia Venc.</label>
+                                            <input type="number" class="form-control" id="dia_vencimento_parcela_bemol" name="dia_vencimento_parcela_bemol" min="1" max="31" placeholder="Dia">
+                                            <div class="form-text" style="font-size: 0.75rem;">Padrão: dia da compra</div>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <div class="form-check mt-5">
+                                                <input class="form-check-input" type="checkbox" id="teve_entrada" name="teve_entrada" value="1">
+                                                <label class="form-check-label" for="teve_entrada">Teve entrada?</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <input type="number" step="0.01" class="form-control mt-1" id="valor_entrada" name="valor_entrada" placeholder="Valor da Entrada" style="display: none;">
+                                </div>
                             </div>
 
                             <button type="submit" class="btn btn-primary me-2"><i class="bi bi-save me-2"></i>Salvar Despesa</button>
@@ -111,13 +132,36 @@ $cartoes = $stmt_cartoes->fetchAll(PDO::FETCH_ASSOC);
     <script>
         // Script para mostrar o campo de cartão apenas quando necessário
         document.getElementById('metodo_pagamento').addEventListener('change', function () {
-            var campoCartao = document.getElementById('campo_cartao');
+            const campoCartao = document.getElementById('campo_cartao');
+            const campoBemol = document.getElementById('campo_bemol');
+            const cartaoSelect = document.getElementById('cartao_id');
+            const numeroParcelasBemol = document.getElementById('numero_parcelas_bemol');
+
             if (this.value === 'cartao_credito') {
                 campoCartao.style.display = 'block';
-                document.getElementById('cartao_id').setAttribute('required', 'required');
+                campoBemol.style.display = 'none';
+                cartaoSelect.setAttribute('required', 'required');
+                numeroParcelasBemol.removeAttribute('required');
+            } else if (this.value === 'bemol_crediario') {
+                campoCartao.style.display = 'none';
+                campoBemol.style.display = 'block';
+                cartaoSelect.removeAttribute('required');
+                numeroParcelasBemol.setAttribute('required', 'required');
             } else {
                 campoCartao.style.display = 'none';
-                document.getElementById('cartao_id').removeAttribute('required');
+                campoBemol.style.display = 'none';
+                cartaoSelect.removeAttribute('required');
+                numeroParcelasBemol.removeAttribute('required');
+            }
+        });
+
+        document.getElementById('teve_entrada').addEventListener('change', function() {
+            document.getElementById('valor_entrada').style.display = this.checked ? 'block' : 'none';
+        });
+    </script>
+    <script src="../../assets/js/scripts.js"></script>
+</body>
+</html>
             }
         });
     </script>
