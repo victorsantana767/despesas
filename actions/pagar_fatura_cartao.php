@@ -20,23 +20,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         // 1. Buscar os dados do cartão para recalcular o período da fatura
-        $stmt_cartao = $pdo->prepare("SELECT dia_fechamento_fatura FROM cartoes WHERE id = ?");
+        $stmt_cartao = $pdo->prepare("SELECT dia_fechamento_fatura, dia_vencimento_fatura FROM cartoes WHERE id = ?");
         $stmt_cartao->execute([$cartao_id]);
         $cartao = $stmt_cartao->fetch(PDO::FETCH_ASSOC);
 
         if (!$cartao) {
             throw new Exception("Cartão não encontrado.");
         }
+        
+        // 2. Define o período como o primeiro e último dia do mês filtrado.
+        $data_inicio_mes = date('Y-m-01', strtotime($filtro_mes_ano));
+        $data_fim_mes = date('Y-m-t', strtotime($filtro_mes_ano));
 
-        // 2. Recalcular o período da fatura (lógica idêntica à da página de listagem)
-        $mes_vencimento_fatura = new DateTime($filtro_mes_ano . '-01');
-        $dia_fechamento = (int)$cartao['dia_fechamento_fatura'];
-
-        $data_fechamento_final = (clone $mes_vencimento_fatura)->setDate((int)$mes_vencimento_fatura->format('Y'), (int)$mes_vencimento_fatura->format('m'), $dia_fechamento);
-        $data_fechamento_inicial = (clone $data_fechamento_final)->modify('-1 month');
-        $data_inicio_periodo = (clone $data_fechamento_inicial)->modify('+1 day');
-
-        // 3. Atualizar todas as despesas PENDENTES dentro do período da fatura para PAGO
+        // 3. Atualizar todas as despesas PENDENTES com vencimento (data_despesa) dentro do mês da fatura.
         $sql = "UPDATE despesas 
                 SET status = 'pago' 
                 WHERE cartao_id = :cartao_id 
@@ -46,8 +42,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
             ':cartao_id' => $cartao_id,
-            ':data_inicio' => $data_inicio_periodo->format('Y-m-d'),
-            ':data_fim' => $data_fechamento_final->format('Y-m-d')
+            ':data_inicio' => $data_inicio_mes,
+            ':data_fim' => $data_fim_mes
         ]);
 
         // 4. Redirecionar de volta com mensagem de sucesso

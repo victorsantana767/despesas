@@ -34,6 +34,7 @@ if (isset($_GET['filtrar'])) {
             d.valor, 
             d.data_despesa, 
             dono.nome AS dono_divida_nome,
+            d.grupo_parcela_id,
             comprador.nome AS comprador_nome, 
             d.status,
             d.metodo_pagamento,
@@ -64,15 +65,45 @@ if (isset($_GET['filtrar'])) {
         $sql_base .= " WHERE " . implode(" AND ", $where_clauses);
     }
 
-    $sql_base .= " ORDER BY d.data_despesa DESC";
+    $sql_base .= " ORDER BY dono.nome ASC, d.data_despesa DESC";
 
     $stmt = $pdo->prepare($sql_base);
     $stmt->execute($params);
     $despesas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Calcular o total
-    foreach ($despesas as $despesa) {
-        $total_despesas += $despesa['valor'];
+    // --- Lógica de Agrupamento ---
+    $despesas_agrupadas = [];
+    $totais_por_dono = [];
+    $compras_agrupadas = [];
+    $total_despesas = 0; // Reinicia para calcular a partir do array
+
+    // Se for admin sem filtro de pessoa, agrupa por pessoa. Senão, agrupa por compra.
+    $agrupar_por_compra = ($user_tipo !== 'admin' || !empty($filtro_usuario_id));
+
+    if ($agrupar_por_compra) {
+        foreach ($despesas as $despesa) {
+            $key = $despesa['grupo_parcela_id'] ?? 'compra_unica_' . $despesa['id'];
+            if (!isset($compras_agrupadas[$key])) {
+                $descricao_base = preg_replace('/ \(Parcela \d+\/\d+\)$/', '', $despesa['descricao']);
+                $compras_agrupadas[$key] = [
+                    'descricao_base' => $descricao_base,
+                    'parcelas' => []
+                ];
+            }
+            $compras_agrupadas[$key]['parcelas'][] = $despesa;
+            $total_despesas += $despesa['valor'];
+        }
+    } else { // Agrupa por pessoa (visão de admin geral)
+        foreach ($despesas as $despesa) {
+            $dono_nome = $despesa['dono_divida_nome'];
+            if (!isset($despesas_agrupadas[$dono_nome])) {
+                $despesas_agrupadas[$dono_nome] = [];
+                $totais_por_dono[$dono_nome] = 0;
+            }
+            $despesas_agrupadas[$dono_nome][] = $despesa;
+            $totais_por_dono[$dono_nome] += $despesa['valor'];
+            $total_despesas += $despesa['valor'];
+        }
     }
 }
 ?>
@@ -96,7 +127,8 @@ if (isset($_GET['filtrar'])) {
                     <span id="sidebar-toggle" class="top-bar-toggle"><i class="bi bi-list fs-4"></i></span>
                 </div>
             </nav>
-            <main class="p-4">
+            <main style="background-color: #f8f9fa;">
+                <div class="container-fluid p-4">
                 <h1 class="mb-4">Relatórios de Despesas</h1>
 
                 <!-- Formulário de Filtros -->
@@ -159,47 +191,92 @@ if (isset($_GET['filtrar'])) {
                             <?php if (empty($despesas)): ?>
                                 <div class="alert alert-warning text-center">Nenhuma despesa encontrada para os filtros selecionados.</div>
                             <?php else: ?>
-                                <div class="table-responsive">
-                                    <table class="table table-bordered table-hover align-middle">
-                                        <thead class="table-secondary">
-                                            <tr>
-                                                <th>Data</th>
-                                                <th>Descrição</th>
-                                                <th>Dono da Dívida</th>
-                                                <th>Comprador</th>
-                                                <th>Pagamento</th>
-                                                <th>Status</th>
-                                                <th class="text-end">Valor</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($despesas as $despesa): ?>
-                                            <tr>
-                                                <td><?php echo date('d/m/Y', strtotime($despesa['data_despesa'])); ?></td>
-                                                <td><?php echo htmlspecialchars($despesa['descricao']); ?></td>
-                                                <td><?php echo htmlspecialchars($despesa['dono_divida_nome']); ?></td>
-                                                <td><?php echo htmlspecialchars($despesa['comprador_nome']); ?></td>
-                                                <td>
-                                                    <?php echo ucfirst(str_replace('_', ' ', $despesa['metodo_pagamento'])); ?>
-                                                    <?php if ($despesa['nome_cartao']): ?>
-                                                        <small class="d-block text-muted"><?php echo htmlspecialchars($despesa['nome_cartao']); ?></small>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <?php echo get_status_badge($despesa['status'], $despesa['data_despesa']); ?>
-                                                </td>
-                                                <td class="text-end"><?php echo number_format($despesa['valor'], 2, ',', '.'); ?></td>
-                                            </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
+                                <?php if ($agrupar_por_compra): ?>
+                                    <!-- VISÃO AGRUPADA POR COMPRA -->
+                                    <?php foreach ($compras_agrupadas as $compra): ?>
+                                        <?php $total_compra = array_sum(array_column($compra['parcelas'], 'valor')); ?>
+                                        <div class="card mb-3">
+                                            <div class="card-header bg-light d-flex justify-content-between">
+                                                <strong><?php echo htmlspecialchars($compra['descricao_base']); ?></strong>
+                                                <span class="fw-bold">Total: R$ <?php echo number_format($total_compra, 2, ',', '.'); ?></span>
+                                            </div>
+                                            <ul class="list-group list-group-flush">
+                                                <?php foreach ($compra['parcelas'] as $parcela): ?>
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <span class="me-3 text-muted"><?php echo date('d/m/Y', strtotime($parcela['data_despesa'])); ?></span>
+                                                            <?php echo htmlspecialchars($parcela['descricao']); ?>
+                                                        </div>
+                                                        <div>
+                                                            <span class="me-3"><?php echo get_status_badge($parcela['status'], $parcela['data_despesa']); ?></span>
+                                                            <span class="fw-bold">R$ <?php echo number_format($parcela['valor'], 2, ',', '.'); ?></span>
+                                                        </div>
+                                                    </li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <!-- VISÃO AGRUPADA POR PESSOA (ADMIN GERAL) -->
+                                    <div class="accordion" id="accordionRelatorio">
+                                        <?php foreach ($despesas_agrupadas as $dono_nome => $despesas_do_dono): ?>
+                                            <div class="accordion-item">
+                                                <h2 class="accordion-header" id="heading-<?php echo md5($dono_nome); ?>">
+                                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<?php echo md5($dono_nome); ?>">
+                                                        <div class="w-100 d-flex justify-content-between pe-3">
+                                                            <span><strong><?php echo htmlspecialchars($dono_nome); ?></strong></span>
+                                                            <span class="badge bg-secondary d-flex align-items-center">Total: R$ <?php echo number_format($totais_por_dono[$dono_nome], 2, ',', '.'); ?></span>
+                                                        </div>
+                                                    </button>
+                                                </h2>
+                                                <div id="collapse-<?php echo md5($dono_nome); ?>" class="accordion-collapse collapse" data-bs-parent="#accordionRelatorio">
+                                                    <div class="accordion-body p-0">
+                                                        <div class="table-responsive">
+                                                            <table class="table table-striped table-hover align-middle mb-0">
+                                                                <thead class="table-light">
+                                                                    <tr>
+                                                                        <th>Data</th>
+                                                                        <th>Descrição</th>
+                                                                        <th>Comprador</th>
+                                                                        <th>Pagamento</th>
+                                                                        <th>Status</th>
+                                                                        <th class="text-end">Valor</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <?php foreach ($despesas_do_dono as $despesa): ?>
+                                                                    <tr>
+                                                                        <td><?php echo date('d/m/Y', strtotime($despesa['data_despesa'])); ?></td>
+                                                                        <td><?php echo htmlspecialchars($despesa['descricao']); ?></td>
+                                                                        <td><?php echo htmlspecialchars($despesa['comprador_nome']); ?></td>
+                                                                        <td>
+                                                                            <?php echo ucfirst(str_replace('_', ' ', $despesa['metodo_pagamento'])); ?>
+                                                                            <?php if ($despesa['nome_cartao']): ?>
+                                                                                <small class="d-block text-muted"><?php echo htmlspecialchars($despesa['nome_cartao']); ?></small>
+                                                                            <?php endif; ?>
+                                                                        </td>
+                                                                        <td>
+                                                                            <?php echo get_status_badge($despesa['status'], $despesa['data_despesa']); ?>
+                                                                        </td>
+                                                                        <td class="text-end"><?php echo number_format($despesa['valor'], 2, ',', '.'); ?></td>
+                                                                    </tr>
+                                                                    <?php endforeach; ?>
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </div>
                     </div>
                 <?php else: ?>
                     <div class="alert alert-info text-center">Selecione os filtros acima e clique em "Filtrar" para gerar um relatório.</div>
                 <?php endif; ?>
+                </div>
             </main>
         </div>
     </div>

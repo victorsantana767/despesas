@@ -2,6 +2,12 @@
 require_once '../../includes/auth_check.php';
 require_once '../../config/config.php';
 
+// Apenas admins podem editar despesas
+if ($user_tipo !== 'admin') {
+    header("Location: index.php");
+    exit();
+}
+
 $id = $_GET['id'] ?? null;
 if (!$id) {
     header("Location: index.php");

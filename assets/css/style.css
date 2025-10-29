@@ -38,6 +38,18 @@
     align-items: center; /* Alinha ícone e texto verticalmente */
 }
 
+/* Estilo para sub-links */
+#sidebar ul ul {
+    padding-left: 1.5rem; /* Indentação para sub-itens */
+    background-color: rgba(0,0,0,0.1);
+}
+
+#sidebar ul li .sub-link {
+    font-size: 0.85rem;
+    padding: 0.5rem 1rem;
+    color: #ced4da;
+}
+
 #sidebar ul li a:hover {
     color: #fff;
     background: #495057; /* Fundo no hover */
@@ -91,4 +103,13 @@ hr.sidebar-divider {
 .btn-group .btn-secondary:hover, .btn-group .btn-danger:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+/* Rotação da seta do menu */
+.arrow {
+    transition: transform 0.3s ease;
+}
+a[aria-expanded="true"] .arrow {
+    transform: rotate(180deg);
+}
 }

@@ -120,6 +120,35 @@ class PDF extends FPDF
         $this->_out($op);
     }
 
+    function DiagonalBanner($text, $status)
+    {
+        // Define cores com base no status
+        switch ($status) {
+            case 'pago':
+                $fillColor = [0, 150, 136]; // Verde Teal mais vivo
+                break;
+            case 'atrasado':
+                $fillColor = [244, 67, 54]; // Vermelho Material Design
+                break;
+            default:
+                $fillColor = [255, 152, 0]; // Laranja Amber
+                break;
+        }
+
+        // Desenha o triângulo de fundo
+        $this->SetFillColor($fillColor[0], $fillColor[1], $fillColor[2]);
+        $this->Polygon([0, 0, 40, 0, 0, 40], 'F');
+
+        // Configura a fonte para o texto da faixa
+        $this->SetFont('Arial', 'B', 10);
+        $this->SetTextColor(255, 255, 255);
+
+        // Rotaciona e posiciona o texto
+        $this->Rotate(-45, 10, 25);
+        $this->Text(10, 25, $this->TextToCell($text));
+        $this->Rotate(0); // Reseta a rotação
+    }
+
     // --- Funções para a faixa diagonal ---
 
     protected $angle = 0;
@@ -150,35 +179,6 @@ class PDF extends FPDF
             $this->_out('Q');
         }
         parent::_endpage();
-    }
-
-    function DiagonalBanner($text, $status)
-    {
-        // Define cores com base no status
-        switch ($status) {
-            case 'pago':
-                $fillColor = [0, 150, 136]; // Verde Teal mais vivo
-                break;
-            case 'atrasado':
-                $fillColor = [244, 67, 54]; // Vermelho Material Design
-                break;
-            default:
-                $fillColor = [255, 152, 0]; // Laranja Amber
-                break;
-        }
-
-        // Desenha o triângulo de fundo
-        $this->SetFillColor($fillColor[0], $fillColor[1], $fillColor[2]);
-        $this->Polygon([0, 0, 0, 50, 50, 0], 'F');
-
-        // Configura a fonte para o texto da faixa
-        $this->SetFont('Arial', 'B', 12);
-        $this->SetTextColor(255, 255, 255);
-
-        // Rotaciona e posiciona o texto
-        $this->Rotate(-45, 12, 30);
-        $this->Text(12, 30, $this->TextToCell($text));
-        $this->Rotate(0); // Reseta a rotação
     }
 
     function Polygon($points, $style = 'D')

@@ -33,8 +33,7 @@ $automoveis = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </nav>
             <main class="p-4">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h1>Gerenciar Automóveis</h1>
-                    <a href="adicionar.php" class="btn btn-success"><i class="bi bi-car-front-fill me-2"></i>Adicionar Veículo</a>
+                    <h1>Listagem de Veículos</h1>
                 </div>
 
                 <?php if (isset($_GET['success'])): ?>

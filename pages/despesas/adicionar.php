@@ -2,6 +2,12 @@
 require_once '../../includes/auth_check.php';
 require_once '../../config/config.php';
 
+// Apenas admins podem adicionar despesas
+if ($user_tipo !== 'admin') {
+    header("Location: index.php");
+    exit();
+}
+
 // Buscar dados para preencher os dropdowns
 // 1. Todos os usuários (para "Dono da Dívida")
 $stmt_usuarios = $pdo->query("SELECT id, nome FROM usuarios ORDER BY nome");
@@ -89,12 +95,16 @@ $cartoes = $stmt_cartoes->fetchAll(PDO::FETCH_ASSOC);
                                 </div>
                                 <div class="col-md-6 mb-3" id="campo_cartao" style="display: none;">
                                     <label for="cartao_id" class="form-label">Qual Cartão?</label>
-                                    <select class="form-select" id="cartao_id" name="cartao_id">
-                                        <option value="">Nenhum</option>
-                                        <?php foreach ($cartoes as $cartao): ?>
-                                            <option value="<?php echo $cartao['id']; ?>"><?php echo htmlspecialchars($cartao['nome_cartao']); ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
+                                    <div class="input-group">
+                                        <select class="form-select" id="cartao_id" name="cartao_id">
+                                            <option value="">Nenhum</option>
+                                            <?php foreach ($cartoes as $cartao): ?>
+                                                <option value="<?php echo $cartao['id']; ?>"><?php echo htmlspecialchars($cartao['nome_cartao']); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <span class="input-group-text">Nº</span>
+                                        <input type="number" class="form-control" id="numero_parcelas_cartao" name="numero_parcelas_cartao" min="1" value="1" placeholder="Parcelas">
+                                    </div>
                                 </div>
                                 <!-- Campos específicos para Crediário Bemol -->
                                 <div class="col-md-6" id="campo_bemol" style="display: none;">

@@ -28,19 +28,28 @@ if (empty($user_ids_selecionados)) {
 // Cria os placeholders para a cláusula IN (...)
 $in_placeholders = implode(',', array_fill(0, count($user_ids_selecionados), '?'));
 
-// --- Consulta de Ganhos ---
-$sql_ganhos = "
-    SELECT u.nome, COALESCE(SUM(g.valor), 0) as total
-    FROM usuarios u
-    LEFT JOIN ganhos g ON u.id = g.usuario_id AND YEAR(g.data_ganho) = ? AND MONTH(g.data_ganho) = ?
-    WHERE u.id IN ($in_placeholders)
-    GROUP BY u.id, u.nome
-    ORDER BY u.nome
-";
-$params_ganhos = array_merge([$ano, $mes], $user_ids_selecionados);
-$stmt_ganhos = $pdo->prepare($sql_ganhos);
-$stmt_ganhos->execute($params_ganhos);
-$ganhos = $stmt_ganhos->fetchAll(PDO::FETCH_KEY_PAIR);
+// --- Consulta de Ganhos (Apenas para usuários ADMIN selecionados) ---
+$sql_admins_selecionados = "SELECT id FROM usuarios WHERE tipo_acesso = 'admin' AND id IN ($in_placeholders)";
+$stmt_admins = $pdo->prepare($sql_admins_selecionados);
+$stmt_admins->execute($user_ids_selecionados);
+$admin_ids_selecionados = $stmt_admins->fetchAll(PDO::FETCH_COLUMN);
+
+$ganhos = [];
+if (!empty($admin_ids_selecionados)) {
+    $in_placeholders_admins = implode(',', array_fill(0, count($admin_ids_selecionados), '?'));
+    $sql_ganhos = "
+        SELECT u.nome, COALESCE(SUM(g.valor), 0) as total
+        FROM usuarios u
+        LEFT JOIN ganhos g ON u.id = g.usuario_id AND YEAR(g.data_ganho) = ? AND MONTH(g.data_ganho) = ?
+        WHERE u.id IN ($in_placeholders_admins)
+        GROUP BY u.id, u.nome
+        ORDER BY u.nome
+    ";
+    $params_ganhos = array_merge([$ano, $mes], $admin_ids_selecionados);
+    $stmt_ganhos = $pdo->prepare($sql_ganhos);
+    $stmt_ganhos->execute($params_ganhos);
+    $ganhos = $stmt_ganhos->fetchAll(PDO::FETCH_KEY_PAIR);
+}
 
 // --- Consulta de Despesas ---
 $sql_despesas = "
@@ -97,28 +106,26 @@ if ($user_tipo === 'admin') {
     ];
 } else { // Usuário de visualização
     // Para o usuário de visualização, o gráfico de barras mostrará as despesas por método de pagamento
-    $sql_despesas_breakdown = "
-        SELECT metodo_pagamento, SUM(valor) as total
-        FROM despesas
-        WHERE dono_divida_id = ? AND YEAR(data_despesa) = ? AND MONTH(data_despesa) = ?
-        GROUP BY metodo_pagamento
-        ORDER BY total DESC
-    ";
-    $stmt_breakdown = $pdo->prepare($sql_despesas_breakdown);
-    $stmt_breakdown->execute([$user_id, $ano, $mes]);
-    $despesas_breakdown = $stmt_breakdown->fetchAll(PDO::FETCH_KEY_PAIR);
+    // A consulta de despesas já foi feita, então podemos reutilizar o resultado.
+    // Como para 'visualizacao' o $user_ids_selecionados só tem o ID dele, o array $despesas terá apenas um item.
+    $total_despesas_usuario = !empty($despesas) ? current($despesas) : 0;
 
     $response_data = [
         'summary' => [
             'totalGanhos' => 0,
-            'totalDespesas' => array_sum($despesas_breakdown),
-            'saldo' => -array_sum($despesas_breakdown),
+            'totalDespesas' => $total_despesas_usuario,
+            'saldo' => -$total_despesas_usuario,
         ],
         'pieChart' => null, // Não haverá gráfico de pizza
         'barChart' => [
-            'labels' => array_map('ucfirst', array_keys($despesas_breakdown)),
+            // Para o usuário de visualização, o gráfico de barras não é relevante da mesma forma.
+            // Vamos deixar vazio por enquanto, ou você pode definir um gráfico específico para ele aqui.
+            // Por exemplo, despesas por categoria, se essa informação existir.
+            // Por simplicidade, retornaremos um gráfico vazio.
+            'labels' => [],
             'datasets' => [
-                ['label' => 'Despesas por Tipo de Pagamento', 'data' => array_values($despesas_breakdown),
+                ['label' => 'Minhas Despesas', 
+                    'data' => [],
                     'backgroundColor' => 'rgba(255, 159, 64, 0.6)',
                     'borderColor' => 'rgba(255, 159, 64, 1)',
                     'borderWidth' => 1

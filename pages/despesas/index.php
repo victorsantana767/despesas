@@ -120,6 +120,27 @@ if ($user_tipo === 'admin') {
     $stmt_usuarios = $pdo->query("SELECT id, nome FROM usuarios ORDER BY nome");
     $usuarios_filtro = $stmt_usuarios->fetchAll(PDO::FETCH_ASSOC);
 }
+
+// --- Lógica para exibir os filtros ---
+// Formatar o mês/ano para exibição
+$formatter = new IntlDateFormatter(
+    'pt_BR',
+    IntlDateFormatter::FULL,
+    IntlDateFormatter::NONE,
+    'America/Sao_Paulo',
+    IntlDateFormatter::GREGORIAN,
+    'MMMM \'de\' yyyy'
+);
+$mes_ano_exibicao = ucfirst($formatter->format(new DateTime($filtro_mes_ano)));
+
+// Nomes dos usuários selecionados para exibição
+$nomes_usuarios_selecionados = 'Todos';
+if (!empty($filtro_usuario_ids)) {
+    $nomes = array_map(function($id) use ($usuarios_filtro) {
+        return $usuarios_filtro[array_search($id, array_column($usuarios_filtro, 'id'))]['nome'];
+    }, $filtro_usuario_ids);
+    $nomes_usuarios_selecionados = implode(', ', $nomes);
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -144,8 +165,7 @@ if ($user_tipo === 'admin') {
             <main style="background-color: #f8f9fa;">
                 <div class="container-fluid p-4">
                     <div class="d-flex justify-content-between align-items-center mb-4">
-                        <h1>Minhas Despesas</h1>
-                        <a href="adicionar.php" class="btn btn-success"><i class="bi bi-plus-circle me-2"></i>Adicionar Despesa</a>
+                        <h1>Listagem de Despesas</h1>
                     </div>
 
                     <!-- Card de Resumo do Total -->
@@ -162,16 +182,26 @@ if ($user_tipo === 'admin') {
                         </div>
                     </div>
 
+                    <?php if (isset($_GET['success']) && $_GET['success'] == 'despesa_adicionada'): ?>
+                        <div class="alert alert-success">Despesa salva com sucesso!</div>
+                    <?php endif; ?>
+                    <?php if (isset($_GET['success']) && $_GET['success'] == 'pago'): ?>
+                        <div class="alert alert-success">Despesa marcada como paga!</div>
+                    <?php endif; ?>
+                    <?php if (isset($_GET['deleted'])): ?>
+                        <div class="alert alert-success">Despesa excluída com sucesso!</div>
+                    <?php endif; ?>
+
                     <!-- Formulário de Filtros -->
                     <div class="card mb-4">
                         <div class="card-body">
                             <form method="GET" action="index.php" class="row g-3 align-items-end">
-                                <div class="col-lg-3 col-md-6 col-sm-12">
+                                <div class="<?php echo ($user_tipo === 'admin') ? 'col-lg-3' : 'col-lg-4'; ?> col-md-6 col-sm-12">
                                     <label for="mes_ano" class="form-label">Filtrar por Mês/Ano</label>
                                     <input type="month" class="form-control" id="mes_ano" name="mes_ano" value="<?php echo htmlspecialchars($filtro_mes_ano); ?>">
                                 </div>
                                 <?php if ($user_tipo === 'admin'): ?>
-                                <div class="col-lg-4 col-md-6 col-sm-12">
+                                <div class="col-lg-3 col-md-6 col-sm-12">
                                     <label for="usuario_id" class="form-label">Pessoa(s)</label>
                                     <div class="dropdown">
                                         <button class="btn btn-outline-secondary dropdown-toggle w-100" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
@@ -192,7 +222,7 @@ if ($user_tipo === 'admin') {
                                     </div>
                                 </div>
                                 <?php endif; ?>
-                                <div class="col-lg-3 col-md-6 col-sm-12">
+                                <div class="<?php echo ($user_tipo === 'admin') ? 'col-lg-3' : 'col-lg-4'; ?> col-md-6 col-sm-12">
                                     <label for="status" class="form-label">Status</label>
                                     <select class="form-select" id="status" name="status">
                                         <option value="">Todos</option>
@@ -201,18 +231,24 @@ if ($user_tipo === 'admin') {
                                         <option value="pago" <?php echo ($filtro_status == 'pago') ? 'selected' : ''; ?>>Pago</option>
                                     </select>
                                 </div>
-                                <div class="col-lg-2 col-md-6 col-sm-12">
+                                <div class="col-lg-3 col-md-12 col-sm-12">
                                     <div class="d-flex w-100">
-                                        <button type="submit" class="btn btn-primary w-100"><i class="bi bi-funnel-fill"></i> Filtrar</button>
+                                        <button type="submit" class="btn btn-primary flex-grow-1"><i class="bi bi-funnel-fill"></i> Filtrar</button>
                                         <?php
                                             // Constrói a query string para os usuários
                                             $user_query_string = http_build_query(['usuario_id' => $filtro_usuario_ids]);
-                                            $pdf_url = "../../actions/exportar_despesas_pdf.php?mes_ano=$filtro_mes_ano&$user_query_string&status=$filtro_status";
+                                            // Constrói os parâmetros para o script de relatório correto
+                                            $pdf_params = http_build_query([
+                                                'usuario_id' => $filtro_usuario_ids,
+                                                'data_inicio' => $data_inicio,
+                                                'data_fim' => $data_fim
+                                            ]);
+                                            $pdf_url = "../../actions/exportar_relatorio_despesas_pdf.php?" . $pdf_params;
                                         ?>
                                         <div class="btn-group ms-2" role="group">
-                                            <a href="<?php echo $pdf_url; ?>&output=I" class="btn btn-secondary" target="_blank" title="Pré-visualizar PDF"><i class="bi bi-eye-fill"></i></a>
-                                            <a href="<?php echo $pdf_url; ?>&output=D" class="btn btn-danger" target="_blank" title="Exportar para PDF">
-                                                <i class="bi bi-file-earmark-pdf-fill"></i>
+                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#pdfPreviewModal" data-pdf-url="<?php echo $pdf_url; ?>&output=I" title="Pré-visualizar PDF"><i class="bi bi-eye-fill me-1"></i>Visualizar</button>
+                                            <a href="<?php echo $pdf_url; ?>&output=D" class="btn btn-danger btn-sm" target="_blank" title="Baixar PDF">
+                                                <i class="bi bi-download me-1"></i>Baixar PDF
                                             </a>
                                         </div>
                                     </div>
@@ -220,16 +256,6 @@ if ($user_tipo === 'admin') {
                             </form>
                         </div>
                     </div>
-
-                    <?php if (isset($_GET['success']) && $_GET['success'] == 'despesa_adicionada'): ?>
-                        <div class="alert alert-success">Despesa salva com sucesso!</div>
-                    <?php endif; ?>
-                    <?php if (isset($_GET['success']) && $_GET['success'] == 'pago'): ?>
-                        <div class="alert alert-success">Despesa marcada como paga!</div>
-                    <?php endif; ?>
-                    <?php if (isset($_GET['deleted'])): ?>
-                        <div class="alert alert-success">Despesa excluída com sucesso!</div>
-                    <?php endif; ?>
 
                     <div class="card">
                         <div class="card-body">
@@ -289,9 +315,11 @@ if ($user_tipo === 'admin') {
                                                                                     <button type="submit" class="btn btn-sm btn-outline-success" title="Marcar como Paga"><i class="bi bi-check-circle"></i></button>
                                                                                 </form>
                                                                             <?php endif; ?>
+                                                                            <?php if ($user_tipo === 'admin'): ?>
                                                                             <a href="editar.php?id=<?php echo $despesa['id']; ?>" class="btn btn-sm btn-outline-primary" title="Editar Despesa">
                                                                                 <i class="bi bi-pencil-square"></i>
                                                                             </a>
+                                                                            <?php endif; ?>
                                                                             <?php if ($user_tipo === 'admin'): ?>
                                                                                 <form action="../../actions/excluir_despesa.php" method="POST" class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir esta despesa?');">
                                                                                     <input type="hidden" name="id" value="<?php echo $despesa['id']; ?>">
@@ -304,6 +332,17 @@ if ($user_tipo === 'admin') {
                                                                                         <i class="bi bi-trash3-fill"></i>
                                                                                     </button>
                                                                                 </form>
+                                                                                <?php endif; ?>
+                                                                                <?php
+                                                                                    // Garante que o botão de excluir compra completa apareça apenas uma vez por grupo
+                                                                                    static $displayed_card_groups = [];
+                                                                                    if ($despesa['metodo_pagamento'] === 'cartao_credito' && !empty($despesa['grupo_parcela_id']) && !isset($displayed_card_groups[$despesa['grupo_parcela_id']])):
+                                                                                        $displayed_card_groups[$despesa['grupo_parcela_id']] = true;
+                                                                                ?>
+                                                                                    <form action="../../actions/excluir_compra_cartao.php" method="POST" class="d-inline" onsubmit="return confirm('Atenção: Isso excluirá TODAS as parcelas desta compra no cartão. Deseja continuar?');">
+                                                                                        <input type="hidden" name="grupo_parcela_id" value="<?php echo $despesa['grupo_parcela_id']; ?>">
+                                                                                        <button type="submit" class="btn btn-sm btn-danger" title="Excluir Compra Completa do Cartão"><i class="bi bi-trash3-fill"></i></button>
+                                                                                    </form>
                                                                                 <?php endif; ?>
                                                                             <?php endif; ?>
                                                                         </div>
@@ -346,17 +385,37 @@ if ($user_tipo === 'admin') {
         </div>
     </div>
 
+    <!-- Modal para Pré-visualização de PDF -->
+    <div class="modal fade" id="pdfPreviewModal" tabindex="-1" aria-labelledby="pdfPreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-fullscreen-lg-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="pdfPreviewModalLabel">Pré-visualização do Relatório de Despesas</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0" style="height: 80vh;">
+                    <iframe id="pdf-iframe" src="" width="100%" height="100%" frameborder="0"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="../../assets/js/scripts.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Impede que o dropdown de usuários feche ao clicar dentro dele
             const userDropdown = document.querySelector('.dropdown-menu');
-            if (userDropdown) {
-                userDropdown.addEventListener('click', function (e) {
-                    e.stopPropagation();
-                });
-            }
+            userDropdown?.addEventListener('click', e => e.stopPropagation());
+
+            // Script para carregar o PDF no modal de pré-visualização
+            const pdfPreviewModal = document.getElementById('pdfPreviewModal');
+            pdfPreviewModal?.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget;
+                const pdfUrl = button.getAttribute('data-pdf-url');
+                const iframe = document.getElementById('pdf-iframe');
+                iframe.setAttribute('src', pdfUrl);
+            });
         });
     </script>
 </body>

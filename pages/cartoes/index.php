@@ -21,23 +21,25 @@ $cartoes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // --- Lógica de Filtragem ---
 $filtro_mes_ano = $_GET['mes_ano'] ?? date('Y-m');
 
-// Otimização (Evitar N+1 Query): Buscar todas as despesas de cartão de crédito para o mês filtrado
+// Otimização (Evitar N+1 Query): Buscar todas as despesas de cartão de crédito
 $all_despesas_cartao = [];
 if (!empty($cartoes)) {
-    // Pega o primeiro e último dia do mês filtrado.
-    // A data_despesa para parcelas de cartão já é a data de vencimento da fatura.
-    $inicio_mes_filtro = date('Y-m-01', strtotime($filtro_mes_ano));
-    $fim_mes_filtro = date('Y-m-t', strtotime($filtro_mes_ano));
+    // Busca despesas em um range maior para garantir que todas as faturas sejam cobertas
+    // Busca despesas cuja data de vencimento (data_despesa) seja no mês filtrado.
+    $data_base = new DateTime($filtro_mes_ano . '-01');
+    $inicio_busca = $data_base->format('Y-m-01');
+    $fim_busca = $data_base->format('Y-m-t');
 
     $sql_despesas = "
-        SELECT id, cartao_id, descricao, valor, data_despesa, status 
+        SELECT id, cartao_id, descricao, valor, data_despesa, COALESCE(data_compra, data_despesa) as data_compra, status 
         FROM despesas 
-        WHERE cartao_id IS NOT NULL 
-        AND data_despesa BETWEEN ? AND ? -- Filtra pelo mês de vencimento da fatura
+        WHERE cartao_id IS NOT NULL
+        AND metodo_pagamento = 'cartao_credito'
+        AND data_despesa BETWEEN ? AND ? -- Filtra pelo mês de vencimento da parcela
         ORDER BY data_despesa DESC
     ";
     $stmt_despesas = $pdo->prepare($sql_despesas);
-    $stmt_despesas->execute([$inicio_mes_filtro, $fim_mes_filtro]);
+    $stmt_despesas->execute([$inicio_busca, $fim_busca]);
     $despesas_raw = $stmt_despesas->fetchAll(PDO::FETCH_ASSOC);
 
     // Agrupa as despesas por cartao_id para fácil acesso
@@ -68,8 +70,7 @@ if (!empty($cartoes)) {
             </nav>
             <main class="p-4">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h1>Gerenciar Cartões de Crédito</h1>
-                    <a href="adicionar.php" class="btn btn-success"><i class="bi bi-credit-card-2-front-fill me-2"></i>Adicionar Novo Cartão</a>
+                    <h1>Faturas de Cartão de Crédito</h1>
                 </div>
 
                 <!-- Formulário de Filtros -->
@@ -112,15 +113,10 @@ if (!empty($cartoes)) {
                                 <?php foreach ($cartoes as $cartao): ?>
                                     <?php
                                         // A data de vencimento da fatura é o mês que está sendo filtrado
-                                        $mes_vencimento_fatura = new DateTime($filtro_mes_ano . '-01');
-
-                                        // Pega as despesas deste cartão que já foram filtradas pelo mês de vencimento
-                                        $despesas_cartao = [];
-                                        if (isset($all_despesas_cartao[$cartao['id']])) {
-                                            foreach ($all_despesas_cartao[$cartao['id']] as $despesa) {
-                                                $despesas_cartao[] = $despesa;
-                                            }
-                                        }
+                                        $mes_vencimento_fatura = new DateTime($filtro_mes_ano . '-' . $cartao['dia_vencimento_fatura']);
+                                        
+                                        // As despesas já foram pré-filtradas por mês de vencimento na consulta SQL inicial.
+                                        $despesas_cartao = $all_despesas_cartao[$cartao['id']] ?? [];
 
                                         $total_fatura = array_sum(array_column($despesas_cartao, 'valor'));
 
@@ -149,7 +145,7 @@ if (!empty($cartoes)) {
                                                 <div class="w-100 d-flex justify-content-between pe-3">
                                                     <div>
                                                         <span><strong><?php echo htmlspecialchars($cartao['nome_cartao']); ?></strong> (Titular: <?php echo htmlspecialchars($cartao['titular_nome']); ?>)</span>
-                                                        <small class="d-block text-muted">Fatura de <?php echo $nome_fatura_pt; ?> - Vencimento dia <?php echo $cartao['dia_vencimento_fatura']; ?></small>
+                                                        <small class="d-block text-muted">Fatura de <?php echo $nome_fatura_pt; ?> - Venc. <?php echo $mes_vencimento_fatura->format('d/m/Y'); ?></small>
                                                     </div>
                                                     <?php if ($total_fatura > 0): ?>
                                                         <span class="badge bg-primary d-flex align-items-center">

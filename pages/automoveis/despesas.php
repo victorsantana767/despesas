@@ -110,7 +110,7 @@ foreach ($despesas as $despesa) {
                                                             <?php foreach ($parcelas as $parcela): ?>
                                                                 <tr>
                                                                     <td><?php echo htmlspecialchars($parcela['descricao']); ?></td>
-                                                                    <td><?php echo date('d/m/Y', strtotime($parcela['data_despesa'])); ?></td>
+                                                                    <td><?php echo date('d/m/Y', strtotime($parcela['data_compra'])); ?></td>
                                                                     <td>R$ <?php echo number_format($parcela['valor'], 2, ',', '.'); ?></td>
                                                                     <td>
                                                                         <?php
@@ -161,7 +161,7 @@ foreach ($despesas as $despesa) {
                                 <tbody>
                                     <?php foreach ($despesas_individuais as $despesa): ?>
                                     <tr>
-                                        <td><?php echo date('d/m/Y', strtotime($despesa['data_despesa'])); ?></td>
+                                        <td><?php echo date('d/m/Y', strtotime($despesa['data_compra'] ?? $despesa['data_despesa'])); ?></td>
                                         <td><?php echo htmlspecialchars($despesa['descricao']); ?></td>
                                         <td><?php echo ucfirst($despesa['tipo_despesa']); ?></td>
                                         <td><?php echo htmlspecialchars($despesa['comprador_nome']); ?></td>

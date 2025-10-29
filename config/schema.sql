@@ -66,7 +66,8 @@ CREATE TABLE despesas (
     id INT AUTO_INCREMENT PRIMARY KEY,
     descricao VARCHAR(255) NOT NULL,
     valor DECIMAL(10, 2) NOT NULL,
-    data_despesa DATE NOT NULL,
+    data_despesa DATE NOT NULL, -- Para despesas normais, é a data da compra. Para parcelas, é a data de vencimento.
+    data_compra DATE NULL, -- Data original da compra, especialmente para parcelamentos
     dono_divida_id INT NOT NULL, -- Quem é o "dono" da despesa (para quem foi comprado)
     comprador_id INT NOT NULL, -- Quem efetuou a compra (você ou sua esposa)
     metodo_pagamento ENUM('dinheiro', 'pix', 'cartao_credito', 'bemol_crediario', 'financiamento', 'consorcio', 'emprestimo') NOT NULL,
